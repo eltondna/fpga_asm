@@ -1,0 +1,38 @@
+module asm_top(
+    input clk, 
+    input enable, 
+    input reset,
+    output [6:0] ssdCathode,
+    output [3:0] ssdAnode,
+    output led
+    );
+    // Basys 3 is a common-anode : Anode as Enable bit and Cathode light up digit
+    wire beat;
+    clockDividerHB  #(.THRESHOLD(20_000_000)) cd (
+        .clk(clk),
+        .enable(enable),
+        .reset(reset),
+        .dividedClk(led),
+        .beat(beat)
+    );
+    reg row;
+    reg col;
+    always @(posedge clk) begin
+        if (beat) begin 
+            if (col == 5) begin
+                row <= row + 1;
+                col <= 1;
+            end
+            else if (row == 4)
+                row <= 1;
+            else  col <= col + 1;
+        end
+    end
+    
+    alpha_ref(
+        .row(row),
+        .col(col),
+        .ssd(ssdCathode)
+    );
+    assign ssdAnode = 4'b1110;
+endmodule
