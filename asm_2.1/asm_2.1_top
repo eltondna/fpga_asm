@@ -1,0 +1,121 @@
+module asm_top(
+    input clk, 
+    input enter, 
+    input reset,
+    input mode,
+    input r_btn,
+    input c_btn,
+    output [6:0] ssdCathode,
+    output [3:0] ssdAnode,
+    output led,
+    output [1:0] state_led,
+    output [2:0] row_led,
+    output [2:0] col_led
+    );
+    // Basys 3 is a common-anode : Anode as Enable bit and Cathode light up digit
+    wire beat;
+    
+    // 1. Beat 
+    clockDividerHB  #(.THRESHOLD(50_000_000)) cd (
+        .clk(clk),
+        .enable(1'd1),
+        .reset(reset),
+        .dividedClk(led),
+        .beat(beat)
+    );
+    
+    // 2. Debouncer 
+    wire r_btn_out;
+    wire c_btn_out;
+    wire enter_out;
+    debouncer(
+        .switchIn(r_btn),
+        .clk(clk),
+        .reset(reset),
+        .debounceout(r_btn_out)
+    );
+    
+    debouncer(
+        .switchIn(c_btn),
+        .clk(clk),
+        .reset(reset),
+        .debounceout(c_btn_out)
+    );
+    
+    debouncer(
+        .switchIn(enter),
+        .clk(clk),
+        .reset(reset),
+        .debounceout(enter_out)
+    );
+    
+    // SPOT
+    wire r_btn_pulse;
+    wire c_btn_pulse;
+    wire enter_pulse;
+    spot(
+        .clk(clk),
+        .spot_in(r_btn_out),
+        .spot_out(r_btn_pulse)
+    );
+    spot(
+        .clk(clk),
+        .spot_in(c_btn_out),
+        .spot_out(c_btn_pulse)
+    );
+     spot(
+        .clk(clk),
+        .spot_in(enter_out),
+        .spot_out(enter_pulse)
+    );
+    
+    
+    wire m_beat;
+    reg [1:0] ssd_digit;
+    reg [3:0] anode_reg;
+    clockDividerHB  #(.THRESHOLD(200_000)) (
+        .clk(clk),
+        .enable(1'd1),
+        .reset(reset),
+        .dividedClk(),
+        .beat(m_beat)
+    );    
+    
+    
+    always @(posedge clk) begin
+        if (reset) ssd_digit = 2'b00;
+        else if (mode && m_beat) ssd_digit <= ssd_digit +1;
+    end
+    
+    reg alpha,r_c;
+    always @(*) begin
+        if (mode) begin 
+        case (ssd_digit)
+            2'b00: begin  alpha = 1; r_c = 0; anode_reg = 4'b0111; end
+            2'b01: begin  alpha = 1; r_c = 0; anode_reg = 4'b1011; end
+            2'b10: begin  alpha = 0; r_c = 1; anode_reg = 4'b1101; end
+            2'b11: begin  alpha = 0; r_c = 0; anode_reg = 4'b1110; end
+            
+        endcase
+        end
+        else begin anode_reg = 4'b0111; alpha = 1; r_c = 0; end
+    end 
+    
+    asm_FSM(
+        .alpha(alpha),
+        .r_c(r_c),
+        .enter(enter_pulse),
+        .r_btn(r_btn_pulse),
+        .c_btn(c_btn_pulse),
+        .clk(clk),
+        .reset(reset),
+        .beat(beat),
+        .ssd(ssdCathode),
+        .state_led(state_led),
+        .r_led(row_led),
+        .c_led(col_led)
+        
+    );
+    assign ssdAnode = anode_reg;
+    
+endmodule
